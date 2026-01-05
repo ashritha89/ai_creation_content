@@ -1,7 +1,8 @@
 import re
 import bcrypt
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 from app.database.user_db import UserDB
+from app.auth.jwt_manager import JWTManager
 
 class AuthManager:
     
@@ -83,10 +84,51 @@ class AuthManager:
         if not AuthManager.verify_password(password, user['password_hash']):
             return False, "Invalid email or password", None
         
+        access_token = JWTManager.generate_token(user['id'], user['email'])
+        refresh_token = JWTManager.generate_refresh_token(user['id'], user['email'])
+        
+        user_data = {
+            'id': user['id'],
+            'email': user['email'],
+            'created_at': user['created_at'],
+            'access_token': access_token,
+            'refresh_token': refresh_token
+        }
+        
+        return True, None, user_data
+    
+    @staticmethod
+    def validate_token(token: str) -> Tuple[bool, Optional[Dict]]:
+        payload = JWTManager.verify_token(token)
+        if not payload:
+            return False, None
+        
+        user = UserDB.get_user_by_id(payload['user_id'])
+        if not user:
+            return False, None
+        
+        return True, {
+            'id': user['id'],
+            'email': user['email'],
+            'created_at': user['created_at']
+        }
+    
+    @staticmethod
+    def refresh_token(refresh_token: str) -> Tuple[bool, Optional[str], Optional[Dict]]:
+        payload = JWTManager.verify_refresh_token(refresh_token)
+        if not payload:
+            return False, "Invalid or expired refresh token", None
+        
+        user = UserDB.get_user_by_id(payload['user_id'])
+        if not user:
+            return False, "User not found", None
+        
+        new_access_token = JWTManager.generate_token(user['id'], user['email'])
+        
         user_data = {
             'id': user['id'],
             'email': user['email'],
             'created_at': user['created_at']
         }
         
-        return True, None, user_data
+        return True, new_access_token, user_data

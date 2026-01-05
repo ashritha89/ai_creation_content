@@ -11,7 +11,7 @@ st.set_page_config(
     page_title="AI Content Creator SaaS",
     page_icon="✨",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 load_dotenv()
@@ -29,11 +29,17 @@ content_generator = ContentGenerator(OPENAI_API_KEY)
 content_evaluator = ContentEvaluator(OPENAI_API_KEY)
 content_repurposer = ContentRepurposer(OPENAI_API_KEY)
 
+if "current_page" not in st.session_state:
+    st.session_state.current_page = "home"
+
 if "user" not in st.session_state:
     st.session_state.user = None
 
-if "show_auth" not in st.session_state:
-    st.session_state.show_auth = False
+if "access_token" not in st.session_state:
+    st.session_state.access_token = None
+
+if "refresh_token" not in st.session_state:
+    st.session_state.refresh_token = None
 
 if "pending_output" not in st.session_state:
     st.session_state.pending_output = None
@@ -41,17 +47,137 @@ if "pending_output" not in st.session_state:
 if "pending_meta" not in st.session_state:
     st.session_state.pending_meta = None
 
-def is_authenticated() -> bool:
-    return st.session_state.user is not None
+def validate_jwt_token():
+    if st.session_state.access_token:
+        is_valid, user_data = AuthManager.validate_token(st.session_state.access_token)
+        if is_valid:
+            st.session_state.user = user_data
+            return True
+        elif st.session_state.refresh_token:
+            success, new_token, user_data = AuthManager.refresh_token(st.session_state.refresh_token)
+            if success:
+                st.session_state.access_token = new_token
+                st.session_state.user = user_data
+                return True
+            else:
+                st.session_state.access_token = None
+                st.session_state.refresh_token = None
+                st.session_state.user = None
+                return False
+        else:
+            st.session_state.access_token = None
+            st.session_state.user = None
+            return False
+    return False
 
-def require_auth():
-    if not is_authenticated():
-        st.session_state.show_auth = True
-        st.rerun()
+def is_authenticated() -> bool:
+    if st.session_state.user:
+        return True
+    return validate_jwt_token()
+
+def navigate_to(page: str):
+    st.session_state.current_page = page
+    st.rerun()
+
+def render_top_navbar():
+    col1, col2, col3, col4, col5 = st.columns([2, 1, 1, 1, 1])
+    
+    with col1:
+        if st.button("✨ AI Content Creator", key="nav_logo", use_container_width=False):
+            navigate_to("home")
+    
+    with col2:
+        if st.button("🏠 Home", key="nav_home", use_container_width=True):
+            navigate_to("home")
+    
+    with col3:
+        if st.button("⚙️ App", key="nav_app", use_container_width=True):
+            navigate_to("app")
+    
+    with col4:
+        if is_authenticated():
+            if st.button("🚪 Logout", key="nav_logout", use_container_width=True):
+                st.session_state.user = None
+                st.session_state.access_token = None
+                st.session_state.refresh_token = None
+                st.session_state.pending_output = None
+                st.session_state.pending_meta = None
+                navigate_to("home")
+        else:
+            if st.button("🔐 Login", key="nav_login", use_container_width=True):
+                navigate_to("auth")
+    
+    with col5:
+        if is_authenticated():
+            st.markdown(f"**📧 {st.session_state.user['email']}**")
+    
+    st.markdown("---")
+
+def render_home_page():
+    st.markdown("# ✨ AI Content Creator")
+    st.markdown("### Transform Your Ideas Into Professional Content")
+    st.markdown("AI-powered content generation platform for creating high-quality LinkedIn posts, emails, blog content, and ad copy.")
+    
+    st.markdown("---")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("✨ Get Started", type="primary", use_container_width=True, key="home_get_started"):
+            navigate_to("app")
+    with col2:
+        if st.button("🔐 Login / Sign Up", use_container_width=True, key="home_login"):
+            navigate_to("auth")
+    
+    st.markdown("---")
+    
+    st.markdown("## Key Features")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### 🧠 Smart Content Generation")
+        st.markdown("Generate professional content using advanced AI. Choose from multiple content types, tones, and styles to match your needs.")
+        
+        st.markdown("### 📊 AI Quality Evaluation")
+        st.markdown("Get instant quality scores and feedback on your generated content. Understand clarity, engagement, tone match, and platform fit.")
+    
+    with col2:
+        st.markdown("### ♻️ Content Repurposing")
+        st.markdown("Transform your content into multiple formats. Convert a single piece into LinkedIn posts, emails, and ad copy with one click.")
+        
+        st.markdown("### 🔐 Secure User Accounts")
+        st.markdown("Your content is private and secure. Each user has isolated access to their own content history and preferences.")
+    
+    st.markdown("---")
+    
+    st.markdown("## How It Works")
+    
+    steps = [
+        ("1. Enter Your Idea", "Describe what content you want to create"),
+        ("2. Configure Settings", "Choose content type, tone, audience, and length"),
+        ("3. Generate Content", "AI creates professional content in seconds"),
+        ("4. Review & Refine", "Get quality scores and repurpose as needed")
+    ]
+    
+    cols = st.columns(4)
+    for i, (title, desc) in enumerate(steps):
+        with cols[i]:
+            st.markdown(f"**{title}**")
+            st.caption(desc)
+    
+    st.markdown("---")
+    
+    st.markdown("## Ready to Get Started?")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        if st.button("✨ Start Creating Content", type="primary", use_container_width=True, key="home_final_cta"):
+            navigate_to("app")
 
 def render_auth_page():
-    st.markdown("## 🔐 Authentication Required")
-    st.markdown("Login or sign up to access full features.")
+    st.markdown("# 🔐 Authentication")
+    # If signup just occurred, prefill the login email before any widgets are created
+    if 'login_email_prefill' in st.session_state and 'login_email' not in st.session_state:
+        st.session_state['login_email'] = st.session_state.pop('login_email_prefill')
     
     tab1, tab2 = st.tabs(["🔑 Login", "🆕 Sign Up"])
     
@@ -66,10 +192,15 @@ def render_auth_page():
             else:
                 success, error_msg, user_data = AuthManager.login_user(email, password)
                 if success:
-                    st.session_state.user = user_data
-                    st.session_state.show_auth = False
+                    st.session_state.user = {
+                        'id': user_data['id'],
+                        'email': user_data['email'],
+                        'created_at': user_data['created_at']
+                    }
+                    st.session_state.access_token = user_data['access_token']
+                    st.session_state.refresh_token = user_data['refresh_token']
                     st.success("✅ Login successful!")
-                    st.rerun()
+                    navigate_to("app")
                 else:
                     st.error(f"❌ {error_msg}")
     
@@ -88,40 +219,13 @@ def render_auth_page():
                 success, error_msg, user_id = AuthManager.register_user(new_email, new_password)
                 if success:
                     st.success("✅ Account created successfully! Please login.")
-                    st.session_state.login_email = new_email
+                    # Prefill the login email on next render without modifying the widget after instantiation
+                    st.session_state['login_email_prefill'] = new_email
+                    st.experimental_rerun()
                 else:
                     st.error(f"❌ {error_msg}")
 
-def render_header():
-    col1, col2 = st.columns([8, 2])
-    
-    with col1:
-        st.markdown("# ✨ AI Content Creator SaaS")
-        if is_authenticated():
-            st.caption(f"Welcome back, {st.session_state.user['email']}! 🎉")
-        else:
-            st.caption("🔓 Free preview available • 🔐 Login for full access")
-    
-    with col2:
-        if is_authenticated():
-            with st.popover("👤 Account", use_container_width=True):
-                st.markdown(f"**📧 {st.session_state.user['email']}**")
-                st.markdown(f"**🆔 User ID:** {st.session_state.user['id']}")
-                st.divider()
-                if st.button("🚪 Logout", use_container_width=True):
-                    st.session_state.user = None
-                    st.session_state.pending_output = None
-                    st.session_state.pending_meta = None
-                    st.session_state.show_auth = False
-                    st.rerun()
-        else:
-            if st.button("🔐 Login / Sign Up", use_container_width=True, type="primary"):
-                st.session_state.show_auth = True
-                st.rerun()
-    
-    st.markdown("---")
-
-def render_sidebar():
+def render_app_sidebar():
     with st.sidebar:
         st.markdown("### 🎛️ Content Settings")
         
@@ -207,7 +311,16 @@ def render_sidebar():
                                     st.rerun()
                         st.caption(f"📅 {item['timestamp']}")
 
-def render_main_content():
+def render_app_page():
+    if is_authenticated():
+        st.markdown("# ⚙️ Dashboard")
+        st.caption(f"Welcome back, {st.session_state.user['email']}!")
+    else:
+        st.markdown("# ⚙️ App")
+        st.info("🔓 Free preview available • 🔐 Login for full access")
+    
+    st.markdown("---")
+    
     st.markdown("### ✍️ Content Generation")
     
     instruction = st.text_area(
@@ -272,7 +385,8 @@ def render_main_content():
                         st.markdown("### 👀 Preview (Limited)")
                         st.info(preview)
                         st.warning("🔒 **Login required** to view full content, download, quality score, and repurposing features.")
-                        st.session_state.show_auth = True
+                        if st.button("🔐 Login / Sign Up", type="primary", key="preview_login"):
+                            navigate_to("auth")
                     else:
                         st.rerun()
                         
@@ -324,6 +438,12 @@ def render_main_content():
         
         st.session_state.pending_output = None
         st.session_state.pending_meta = None
+    elif not is_authenticated() and st.session_state.pending_output:
+        st.markdown("---")
+        st.markdown("### 🔒 Login Required")
+        st.warning("🔐 Login required to continue. Please login to view full content, download, quality scores, and repurposing features.")
+        if st.button("🔐 Login / Sign Up", type="primary", key="locked_login"):
+            navigate_to("auth")
 
 def render_history_view():
     if 'viewing_content' in st.session_state:
@@ -346,18 +466,20 @@ def render_history_view():
             st.rerun()
 
 def main():
-    render_header()
+    validate_jwt_token()
     
-    if st.session_state.show_auth and not is_authenticated():
+    render_top_navbar()
+    
+    if st.session_state.current_page == "home":
+        render_home_page()
+    elif st.session_state.current_page == "auth":
         render_auth_page()
-        return
-    
-    render_sidebar()
-    
-    if 'viewing_content' in st.session_state:
-        render_history_view()
-    else:
-        render_main_content()
+    elif st.session_state.current_page == "app":
+        render_app_sidebar()
+        if 'viewing_content' in st.session_state:
+            render_history_view()
+        else:
+            render_app_page()
 
 if __name__ == "__main__":
     main()
