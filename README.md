@@ -65,6 +65,13 @@ OPENAI_API_KEY=your_openai_api_key_here
 JWT_SECRET=your-super-secret-jwt-key-change-this
 ```
 
+Alternatively, copy `.env.example` to `.env` and fill in the values:
+
+```powershell
+copy .env.example .env
+# then edit .env to add your real secrets
+```
+
 **Important**: Generate a strong JWT secret:
 ```python
 import secrets
