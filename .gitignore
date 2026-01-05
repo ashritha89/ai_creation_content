@@ -1,2 +1,27 @@
 
 .env
+
+# Bytecode
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Databases
+saas_app.db
+*.sqlite3
+*.db
+
+# IDE and OS files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Pytest cache
+.pytest_cache/
+
+# Local history / large files
+history.json
